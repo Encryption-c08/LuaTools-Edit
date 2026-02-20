@@ -29,20 +29,6 @@
                     } catch(_){ }
                 });
                 
-                try {
-                    if (!sessionStorage.getItem('LuaToolsLoadedAppsGate')) {
-                        sessionStorage.setItem('LuaToolsLoadedAppsGate', '1');
-                        Millennium.callServerMethod('luatools', 'ReadLoadedApps', { contentScriptQuery: '' }).then(function(res){
-                            try {
-                                const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                                const apps = (payload && payload.success && Array.isArray(payload.apps)) ? payload.apps : [];
-                                if (apps.length > 0) {
-                                    showLoadedAppsPopup(apps);
-                                }
-                            } catch(_){ }
-                        });
-                    }
-                } catch(_){ }
             }
         } catch(_) { }
     }
@@ -53,27 +39,16 @@
     }
     
     
-    document.addEventListener('click', function(evt) {
+    document.addEventListener('click', async function(evt) {
         const anchor = evt.target && (evt.target.closest ? evt.target.closest('.luatools-button') : null);
         if (anchor) {
             evt.preventDefault();
             backendLog('LuaTools delegated click');
-            
-            if (!document.querySelector('.luatools-overlay')) {
-                showTestPopup();
-            }
             try {
                 const match = window.location.href.match(/https:\/\/store\.steampowered\.com\/app\/(\d+)/) || window.location.href.match(/https:\/\/steamcommunity\.com\/app\/(\d+)/);
                 const appid = match ? parseInt(match[1], 10) : NaN;
                 if (!isNaN(appid) && typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
-                    if (runState.inProgress && runState.appid === appid) {
-                        backendLog('LuaTools: operation already in progress for this appid');
-                        return;
-                    }
-                    runState.inProgress = true;
-                    runState.appid = appid;
-                    Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid, contentScriptQuery: '' });
-                    startPolling(appid);
+                    await startAddViaLuaToolsFlow(appid, { showOverlay: true });
                 }
             } catch(_) {}
         }

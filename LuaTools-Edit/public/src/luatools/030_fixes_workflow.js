@@ -172,6 +172,13 @@
         const gameName = document.createElement('div');
         gameName.style.cssText = 'font-size:22px;color:#f0f0f0;font-weight:600;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,0.6);';
         gameName.textContent = data.gameName || lt('Unknown Game');
+        if (!data.gameName || String(data.gameName).startsWith('Unknown Game') || String(data.gameName) === lt('Unknown Game')) {
+            fetchSteamGameName(data.appid).then(function(name) {
+                if (!name) return;
+                data.gameName = name;
+                gameName.textContent = name;
+            }).catch(function(){});
+        }
 
         const contentContainer = document.createElement('div');
         contentContainer.style.position = 'relative';

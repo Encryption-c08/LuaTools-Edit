@@ -944,7 +944,7 @@
             }
 
             if (addGameBtn) {
-                addGameBtn.addEventListener('click', function(e){
+                addGameBtn.addEventListener('click', async function(e){
                     e.preventDefault();
                     if (runState.inProgress) return;
                     try {
@@ -954,12 +954,10 @@
                             ShowLuaToolsAlert('LuaTools', errText);
                             return;
                         }
-                        runState.inProgress = true;
-                        runState.appid = appid;
-                        showTestPopup();
-                        Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid: appid, contentScriptQuery: '' });
-                        setTimeout(refreshDailyAddUsage, 600);
-                        startPolling(appid);
+                        const started = await startAddViaLuaToolsFlow(appid, { showOverlay: true });
+                        if (started) {
+                            setTimeout(refreshDailyAddUsage, 600);
+                        }
                     } catch(err) {
                         backendLog('LuaTools: Add Game button error: ' + err);
                     }
@@ -1180,11 +1178,14 @@
                 for (let j = 0; j < chunk.length; j++) {
                     const id = chunk[j];
                     const entry = data && data[id];
+                    const fullgame = (entry && entry.success && entry.data && entry.data.fullgame) ? entry.data.fullgame : null;
                     cache[id] = (entry && entry.success && entry.data) ? {
                         name: entry.data.name || '',
                         type: entry.data.type || '',
+                        fullgameAppid: fullgame && fullgame.appid ? String(fullgame.appid) : '',
+                        fullgameName: fullgame && fullgame.name ? String(fullgame.name) : '',
                         success: true
-                    } : { name: '', type: '', success: false };
+                    } : { name: '', type: '', fullgameAppid: '', fullgameName: '', success: false };
                 }
             } catch(_) {
                 for (let j = 0; j < chunk.length; j++) {
@@ -1203,11 +1204,14 @@
         if (!res.ok) throw new Error('App lookup failed: ' + res.status);
         const data = await res.json();
         const entry = data && data[key];
+        const fullgame = (entry && entry.success && entry.data && entry.data.fullgame) ? entry.data.fullgame : null;
         const details = (entry && entry.success && entry.data) ? {
             name: entry.data.name || '',
             type: entry.data.type || '',
+            fullgameAppid: fullgame && fullgame.appid ? String(fullgame.appid) : '',
+            fullgameName: fullgame && fullgame.name ? String(fullgame.name) : '',
             success: true
-        } : { name: '', type: '', success: false };
+        } : { name: '', type: '', fullgameAppid: '', fullgameName: '', success: false };
         cache[key] = details;
         return details;
     }
@@ -1216,6 +1220,83 @@
         const details = await fetchAppDetailsById(appid);
         if (details && details.name) return details.name;
         return null;
+    }
+
+    async function fetchSteamGameName(appid) {
+        if (!appid) return null;
+        try {
+            return await fetchAppNameById(appid);
+        } catch(err) {
+            backendLog('LuaTools: fetchSteamGameName error for ' + appid + ': ' + err);
+            return null;
+        }
+    }
+
+    async function getDlcBaseGameInfo(appid) {
+        try {
+            const details = await fetchAppDetailsById(appid);
+            const type = details && details.type ? String(details.type).toLowerCase() : '';
+            if (type !== 'dlc') return null;
+            const fullgameAppid = details && details.fullgameAppid ? String(details.fullgameAppid).trim() : '';
+            if (!/^\d+$/.test(fullgameAppid)) return null;
+            let fullgameName = details && details.fullgameName ? String(details.fullgameName) : '';
+            if (!fullgameName) {
+                fullgameName = await fetchSteamGameName(fullgameAppid) || '';
+            }
+            return {
+                fullgameAppid: fullgameAppid,
+                fullgameName: fullgameName
+            };
+        } catch(_) {
+            return null;
+        }
+    }
+
+    async function startAddViaLuaToolsFlow(appid, options) {
+        const parsedAppId = parseInt(appid, 10);
+        if (isNaN(parsedAppId)) return false;
+        if (typeof Millennium === 'undefined' || typeof Millennium.callServerMethod !== 'function') {
+            return false;
+        }
+
+        const opts = (options && typeof options === 'object') ? options : {};
+        const shouldShowOverlay = opts.showOverlay !== false;
+
+        try {
+            const dlcInfo = await getDlcBaseGameInfo(parsedAppId);
+            if (dlcInfo && dlcInfo.fullgameAppid) {
+                if (typeof showDlcWarning === 'function') {
+                    showDlcWarning(parsedAppId, dlcInfo.fullgameAppid, dlcInfo.fullgameName);
+                } else {
+                    ShowLuaToolsAlert('LuaTools', lt('DLCs are added together with the base game. To add fixes for this DLC, please go to the base game page: <br><br><b>{gameName}</b>').replace('{gameName}', dlcInfo.fullgameName || lt('Base Game')));
+                }
+                return false;
+            }
+        } catch(_) {}
+
+        if (runState.inProgress && runState.appid === parsedAppId) {
+            backendLog('LuaTools: operation already in progress for this appid');
+            return false;
+        }
+
+        if (shouldShowOverlay && !document.querySelector('.luatools-overlay')) {
+            showTestPopup();
+        }
+
+        runState.inProgress = true;
+        runState.appid = parsedAppId;
+        window.__LuaToolsCurrentAppId = parsedAppId;
+
+        try {
+            Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid: parsedAppId, contentScriptQuery: '' });
+            startPolling(parsedAppId);
+            return true;
+        } catch(err) {
+            backendLog('LuaTools: start add flow error: ' + err);
+            runState.inProgress = false;
+            runState.appid = null;
+            return false;
+        }
     }
 
     function getCurrentAppId() {
@@ -1470,18 +1551,17 @@
 
         setSteamTooltip(button, addText);
 
-        button.onclick = function() {
+        button.onclick = async function() {
             if (runState.inProgress) return;
-            runState.inProgress = true;
-            runState.appid = appId;
             button.style.pointerEvents = 'none';
             buttonSpan.textContent = lt('Working…');
             button.style.opacity = '0.7';
-            showTestPopup();
-            try {
-                Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid: appId, contentScriptQuery: '' });
-            } catch(_) {}
-            startPolling(appId);
+            const started = await startAddViaLuaToolsFlow(appId, { showOverlay: true });
+            if (!started) {
+                button.style.pointerEvents = '';
+                buttonSpan.textContent = addText;
+                button.style.opacity = '';
+            }
         };
 
         container.appendChild(btnContainer);
@@ -2076,6 +2156,13 @@
         const gameName = document.createElement('div');
         gameName.style.cssText = 'font-size:22px;color:#f0f0f0;font-weight:600;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,0.6);';
         gameName.textContent = data.gameName || lt('Unknown Game');
+        if (!data.gameName || String(data.gameName).startsWith('Unknown Game') || String(data.gameName) === lt('Unknown Game')) {
+            fetchSteamGameName(data.appid).then(function(name) {
+                if (!name) return;
+                data.gameName = name;
+                gameName.textContent = name;
+            }).catch(function(){});
+        }
 
         const contentContainer = document.createElement('div');
         contentContainer.style.position = 'relative';
@@ -3266,7 +3353,15 @@
 
             const gameName = document.createElement('div');
             gameName.style.cssText = 'font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:6px;';
-            gameName.textContent = fix.gameName || 'Unknown Game (' + fix.appid + ')';
+            const fixNameText = fix.gameName ? String(fix.gameName) : '';
+            gameName.textContent = fixNameText || ('Unknown Game (' + fix.appid + ')');
+            if (!fixNameText || fixNameText.startsWith('Unknown Game') || fixNameText === lt('Unknown Game')) {
+                fetchSteamGameName(fix.appid).then(function(name) {
+                    if (!name) return;
+                    fix.gameName = name;
+                    gameName.textContent = name;
+                }).catch(function(){});
+            }
             infoDiv.appendChild(gameName);
 
             const detailsDiv = document.createElement('div');
@@ -3563,7 +3658,15 @@
 
             const gameName = document.createElement('div');
             gameName.style.cssText = 'font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:6px;';
-            gameName.textContent = script.gameName || ('AppID ' + script.appid);
+            const scriptNameText = script.gameName ? String(script.gameName) : '';
+            gameName.textContent = scriptNameText || ('Unknown Game (' + script.appid + ')');
+            if (!scriptNameText || scriptNameText.startsWith('Unknown Game') || scriptNameText === lt('Unknown Game')) {
+                fetchSteamGameName(script.appid).then(function(name) {
+                    if (!name) return;
+                    script.gameName = name;
+                    gameName.textContent = name;
+                }).catch(function(){});
+            }
 
             if (script.isDisabled) {
                 const disabledBadge = document.createElement('span');
@@ -4144,7 +4247,80 @@
         document.body.appendChild(overlay);
     }
 
-    
+    function showDlcWarning(appid, fullgameAppid, fullgameName) {
+        closeSettingsOverlay();
+        if (document.querySelector('.luatools-dlc-warning-overlay')) return;
+
+        ensureLuaToolsStyles();
+        ensureFontAwesome();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'luatools-dlc-warning-overlay luatools-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100001;display:flex;align-items:center;justify-content:center;';
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:12px;width:520px;max-width:calc(100vw - 32px);padding:32px;box-shadow:0 25px 70px rgba(0,0,0,.9);';
+
+        const iconWrap = document.createElement('div');
+        iconWrap.style.cssText = 'text-align:center;margin-bottom:18px;';
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-circle-info';
+        icon.style.cssText = 'color:#66c0f4;font-size:44px;';
+        iconWrap.appendChild(icon);
+
+        const titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-size:24px;font-weight:800;text-align:center;margin-bottom:14px;background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        titleEl.textContent = lt('DLC Detected');
+
+        const messageEl = document.createElement('div');
+        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:26px;color:#c7d5e0;text-align:center;';
+        messageEl.innerHTML = lt('DLCs are added together with the base game. To add fixes for this DLC, please go to the base game page: <br><br><b>{gameName}</b>')
+            .replace('{gameName}', fullgameName || lt('Base Game'));
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;gap:12px;justify-content:center;';
+
+        const cancelBtn = document.createElement('a');
+        cancelBtn.href = '#';
+        cancelBtn.className = 'luatools-btn';
+        cancelBtn.style.flex = '1';
+        cancelBtn.innerHTML = `<span>${lt('Cancel')}</span>`;
+        cancelBtn.onclick = function(e) {
+            e.preventDefault();
+            overlay.remove();
+        };
+
+        const goBtn = document.createElement('a');
+        goBtn.href = '#';
+        goBtn.className = 'luatools-btn primary';
+        goBtn.style.flex = '1.3';
+        goBtn.innerHTML = `<span>${lt('Go to Base Game')}</span>`;
+        goBtn.onclick = function(e) {
+            e.preventDefault();
+            try {
+                if (typeof openExternalUrl === 'function') {
+                    openExternalUrl('https://store.steampowered.com/app/' + String(fullgameAppid) + '/');
+                }
+            } catch(_) {}
+            overlay.remove();
+        };
+
+        btnRow.appendChild(cancelBtn);
+        btnRow.appendChild(goBtn);
+        modal.appendChild(iconWrap);
+        modal.appendChild(titleEl);
+        modal.appendChild(messageEl);
+        modal.appendChild(btnRow);
+        overlay.appendChild(modal);
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        });
+
+        document.body.appendChild(overlay);
+    }
 
     function ensureStyles() {
         if (!document.getElementById('luatools-spacing-styles')) {
@@ -4475,20 +4651,6 @@
                     } catch(_){ }
                 });
                 
-                try {
-                    if (!sessionStorage.getItem('LuaToolsLoadedAppsGate')) {
-                        sessionStorage.setItem('LuaToolsLoadedAppsGate', '1');
-                        Millennium.callServerMethod('luatools', 'ReadLoadedApps', { contentScriptQuery: '' }).then(function(res){
-                            try {
-                                const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                                const apps = (payload && payload.success && Array.isArray(payload.apps)) ? payload.apps : [];
-                                if (apps.length > 0) {
-                                    showLoadedAppsPopup(apps);
-                                }
-                            } catch(_){ }
-                        });
-                    }
-                } catch(_){ }
             }
         } catch(_) { }
     }
@@ -4499,27 +4661,16 @@
     }
     
     
-    document.addEventListener('click', function(evt) {
+    document.addEventListener('click', async function(evt) {
         const anchor = evt.target && (evt.target.closest ? evt.target.closest('.luatools-button') : null);
         if (anchor) {
             evt.preventDefault();
             backendLog('LuaTools delegated click');
-            
-            if (!document.querySelector('.luatools-overlay')) {
-                showTestPopup();
-            }
             try {
                 const match = window.location.href.match(/https:\/\/store\.steampowered\.com\/app\/(\d+)/) || window.location.href.match(/https:\/\/steamcommunity\.com\/app\/(\d+)/);
                 const appid = match ? parseInt(match[1], 10) : NaN;
                 if (!isNaN(appid) && typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
-                    if (runState.inProgress && runState.appid === appid) {
-                        backendLog('LuaTools: operation already in progress for this appid');
-                        return;
-                    }
-                    runState.inProgress = true;
-                    runState.appid = appid;
-                    Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid, contentScriptQuery: '' });
-                    startPolling(appid);
+                    await startAddViaLuaToolsFlow(appid, { showOverlay: true });
                 }
             } catch(_) {}
         }

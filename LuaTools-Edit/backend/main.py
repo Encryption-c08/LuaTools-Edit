@@ -53,6 +53,7 @@ from settings.manager import (
     get_available_locales,
     get_settings_payload,
     get_translation_map,
+    init_settings,
 )
 from steam_utils import detect_steam_install_path, get_game_install_path_response, open_game_folder
 
@@ -433,6 +434,11 @@ class Plugin:
 
         ensure_http_client("InitApis")
         ensure_temp_download_dir()
+
+        try:
+            init_settings()
+        except Exception as exc:
+            logger.warn(f"LuaTools: settings initialization failed: {exc}")
 
         try:
             init_applist()

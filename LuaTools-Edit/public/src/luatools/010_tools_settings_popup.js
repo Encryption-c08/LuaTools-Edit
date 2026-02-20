@@ -391,7 +391,7 @@
             }
 
             if (addGameBtn) {
-                addGameBtn.addEventListener('click', function(e){
+                addGameBtn.addEventListener('click', async function(e){
                     e.preventDefault();
                     if (runState.inProgress) return;
                     try {
@@ -401,12 +401,10 @@
                             ShowLuaToolsAlert('LuaTools', errText);
                             return;
                         }
-                        runState.inProgress = true;
-                        runState.appid = appid;
-                        showTestPopup();
-                        Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid: appid, contentScriptQuery: '' });
-                        setTimeout(refreshDailyAddUsage, 600);
-                        startPolling(appid);
+                        const started = await startAddViaLuaToolsFlow(appid, { showOverlay: true });
+                        if (started) {
+                            setTimeout(refreshDailyAddUsage, 600);
+                        }
                     } catch(err) {
                         backendLog('LuaTools: Add Game button error: ' + err);
                     }

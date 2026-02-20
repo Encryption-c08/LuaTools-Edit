@@ -148,11 +148,14 @@
                 for (let j = 0; j < chunk.length; j++) {
                     const id = chunk[j];
                     const entry = data && data[id];
+                    const fullgame = (entry && entry.success && entry.data && entry.data.fullgame) ? entry.data.fullgame : null;
                     cache[id] = (entry && entry.success && entry.data) ? {
                         name: entry.data.name || '',
                         type: entry.data.type || '',
+                        fullgameAppid: fullgame && fullgame.appid ? String(fullgame.appid) : '',
+                        fullgameName: fullgame && fullgame.name ? String(fullgame.name) : '',
                         success: true
-                    } : { name: '', type: '', success: false };
+                    } : { name: '', type: '', fullgameAppid: '', fullgameName: '', success: false };
                 }
             } catch(_) {
                 for (let j = 0; j < chunk.length; j++) {
@@ -171,11 +174,14 @@
         if (!res.ok) throw new Error('App lookup failed: ' + res.status);
         const data = await res.json();
         const entry = data && data[key];
+        const fullgame = (entry && entry.success && entry.data && entry.data.fullgame) ? entry.data.fullgame : null;
         const details = (entry && entry.success && entry.data) ? {
             name: entry.data.name || '',
             type: entry.data.type || '',
+            fullgameAppid: fullgame && fullgame.appid ? String(fullgame.appid) : '',
+            fullgameName: fullgame && fullgame.name ? String(fullgame.name) : '',
             success: true
-        } : { name: '', type: '', success: false };
+        } : { name: '', type: '', fullgameAppid: '', fullgameName: '', success: false };
         cache[key] = details;
         return details;
     }
@@ -184,6 +190,83 @@
         const details = await fetchAppDetailsById(appid);
         if (details && details.name) return details.name;
         return null;
+    }
+
+    async function fetchSteamGameName(appid) {
+        if (!appid) return null;
+        try {
+            return await fetchAppNameById(appid);
+        } catch(err) {
+            backendLog('LuaTools: fetchSteamGameName error for ' + appid + ': ' + err);
+            return null;
+        }
+    }
+
+    async function getDlcBaseGameInfo(appid) {
+        try {
+            const details = await fetchAppDetailsById(appid);
+            const type = details && details.type ? String(details.type).toLowerCase() : '';
+            if (type !== 'dlc') return null;
+            const fullgameAppid = details && details.fullgameAppid ? String(details.fullgameAppid).trim() : '';
+            if (!/^\d+$/.test(fullgameAppid)) return null;
+            let fullgameName = details && details.fullgameName ? String(details.fullgameName) : '';
+            if (!fullgameName) {
+                fullgameName = await fetchSteamGameName(fullgameAppid) || '';
+            }
+            return {
+                fullgameAppid: fullgameAppid,
+                fullgameName: fullgameName
+            };
+        } catch(_) {
+            return null;
+        }
+    }
+
+    async function startAddViaLuaToolsFlow(appid, options) {
+        const parsedAppId = parseInt(appid, 10);
+        if (isNaN(parsedAppId)) return false;
+        if (typeof Millennium === 'undefined' || typeof Millennium.callServerMethod !== 'function') {
+            return false;
+        }
+
+        const opts = (options && typeof options === 'object') ? options : {};
+        const shouldShowOverlay = opts.showOverlay !== false;
+
+        try {
+            const dlcInfo = await getDlcBaseGameInfo(parsedAppId);
+            if (dlcInfo && dlcInfo.fullgameAppid) {
+                if (typeof showDlcWarning === 'function') {
+                    showDlcWarning(parsedAppId, dlcInfo.fullgameAppid, dlcInfo.fullgameName);
+                } else {
+                    ShowLuaToolsAlert('LuaTools', lt('DLCs are added together with the base game. To add fixes for this DLC, please go to the base game page: <br><br><b>{gameName}</b>').replace('{gameName}', dlcInfo.fullgameName || lt('Base Game')));
+                }
+                return false;
+            }
+        } catch(_) {}
+
+        if (runState.inProgress && runState.appid === parsedAppId) {
+            backendLog('LuaTools: operation already in progress for this appid');
+            return false;
+        }
+
+        if (shouldShowOverlay && !document.querySelector('.luatools-overlay')) {
+            showTestPopup();
+        }
+
+        runState.inProgress = true;
+        runState.appid = parsedAppId;
+        window.__LuaToolsCurrentAppId = parsedAppId;
+
+        try {
+            Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid: parsedAppId, contentScriptQuery: '' });
+            startPolling(parsedAppId);
+            return true;
+        } catch(err) {
+            backendLog('LuaTools: start add flow error: ' + err);
+            runState.inProgress = false;
+            runState.appid = null;
+            return false;
+        }
     }
 
     function getCurrentAppId() {
@@ -438,18 +521,17 @@
 
         setSteamTooltip(button, addText);
 
-        button.onclick = function() {
+        button.onclick = async function() {
             if (runState.inProgress) return;
-            runState.inProgress = true;
-            runState.appid = appId;
             button.style.pointerEvents = 'none';
             buttonSpan.textContent = lt('Working…');
             button.style.opacity = '0.7';
-            showTestPopup();
-            try {
-                Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid: appId, contentScriptQuery: '' });
-            } catch(_) {}
-            startPolling(appId);
+            const started = await startAddViaLuaToolsFlow(appId, { showOverlay: true });
+            if (!started) {
+                button.style.pointerEvents = '';
+                buttonSpan.textContent = addText;
+                button.style.opacity = '';
+            }
         };
 
         container.appendChild(btnContainer);

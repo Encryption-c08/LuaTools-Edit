@@ -475,7 +475,15 @@
 
             const gameName = document.createElement('div');
             gameName.style.cssText = 'font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:6px;';
-            gameName.textContent = fix.gameName || 'Unknown Game (' + fix.appid + ')';
+            const fixNameText = fix.gameName ? String(fix.gameName) : '';
+            gameName.textContent = fixNameText || ('Unknown Game (' + fix.appid + ')');
+            if (!fixNameText || fixNameText.startsWith('Unknown Game') || fixNameText === lt('Unknown Game')) {
+                fetchSteamGameName(fix.appid).then(function(name) {
+                    if (!name) return;
+                    fix.gameName = name;
+                    gameName.textContent = name;
+                }).catch(function(){});
+            }
             infoDiv.appendChild(gameName);
 
             const detailsDiv = document.createElement('div');
@@ -772,7 +780,15 @@
 
             const gameName = document.createElement('div');
             gameName.style.cssText = 'font-size:14px;font-weight:600;color:#f0f0f0;margin-bottom:6px;';
-            gameName.textContent = script.gameName || ('AppID ' + script.appid);
+            const scriptNameText = script.gameName ? String(script.gameName) : '';
+            gameName.textContent = scriptNameText || ('Unknown Game (' + script.appid + ')');
+            if (!scriptNameText || scriptNameText.startsWith('Unknown Game') || scriptNameText === lt('Unknown Game')) {
+                fetchSteamGameName(script.appid).then(function(name) {
+                    if (!name) return;
+                    script.gameName = name;
+                    gameName.textContent = name;
+                }).catch(function(){});
+            }
 
             if (script.isDisabled) {
                 const disabledBadge = document.createElement('span');

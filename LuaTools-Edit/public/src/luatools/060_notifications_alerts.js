@@ -232,4 +232,77 @@
         document.body.appendChild(overlay);
     }
 
-    
+    function showDlcWarning(appid, fullgameAppid, fullgameName) {
+        closeSettingsOverlay();
+        if (document.querySelector('.luatools-dlc-warning-overlay')) return;
+
+        ensureLuaToolsStyles();
+        ensureFontAwesome();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'luatools-dlc-warning-overlay luatools-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100001;display:flex;align-items:center;justify-content:center;';
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:12px;width:520px;max-width:calc(100vw - 32px);padding:32px;box-shadow:0 25px 70px rgba(0,0,0,.9);';
+
+        const iconWrap = document.createElement('div');
+        iconWrap.style.cssText = 'text-align:center;margin-bottom:18px;';
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-circle-info';
+        icon.style.cssText = 'color:#66c0f4;font-size:44px;';
+        iconWrap.appendChild(icon);
+
+        const titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-size:24px;font-weight:800;text-align:center;margin-bottom:14px;background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        titleEl.textContent = lt('DLC Detected');
+
+        const messageEl = document.createElement('div');
+        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:26px;color:#c7d5e0;text-align:center;';
+        messageEl.innerHTML = lt('DLCs are added together with the base game. To add fixes for this DLC, please go to the base game page: <br><br><b>{gameName}</b>')
+            .replace('{gameName}', fullgameName || lt('Base Game'));
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;gap:12px;justify-content:center;';
+
+        const cancelBtn = document.createElement('a');
+        cancelBtn.href = '#';
+        cancelBtn.className = 'luatools-btn';
+        cancelBtn.style.flex = '1';
+        cancelBtn.innerHTML = `<span>${lt('Cancel')}</span>`;
+        cancelBtn.onclick = function(e) {
+            e.preventDefault();
+            overlay.remove();
+        };
+
+        const goBtn = document.createElement('a');
+        goBtn.href = '#';
+        goBtn.className = 'luatools-btn primary';
+        goBtn.style.flex = '1.3';
+        goBtn.innerHTML = `<span>${lt('Go to Base Game')}</span>`;
+        goBtn.onclick = function(e) {
+            e.preventDefault();
+            try {
+                if (typeof openExternalUrl === 'function') {
+                    openExternalUrl('https://store.steampowered.com/app/' + String(fullgameAppid) + '/');
+                }
+            } catch(_) {}
+            overlay.remove();
+        };
+
+        btnRow.appendChild(cancelBtn);
+        btnRow.appendChild(goBtn);
+        modal.appendChild(iconWrap);
+        modal.appendChild(titleEl);
+        modal.appendChild(messageEl);
+        modal.appendChild(btnRow);
+        overlay.appendChild(modal);
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        });
+
+        document.body.appendChild(overlay);
+    }

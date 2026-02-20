@@ -158,6 +158,10 @@
     "settings.saving": "Salvando...",
     "settings.title": "LuaTools · Configurações",
     "settings.unsaved": "Alterações não salvas",
-    "{fix} applied successfully!": "{fix} aplicado com sucesso!"
+    "{fix} applied successfully!": "{fix} aplicado com sucesso!",
+    "DLC Detected": "DLC Detectada",
+    "DLCs are added together with the base game. To add fixes for this DLC, please go to the base game page: <br><br><b>{gameName}</b>": "DLCs são adicionadas junto com o jogo base. Para adicionar correções para esta DLC, por favor vá para a página do jogo base: <br><br><b>{gameName}</b>",
+    "Go to Base Game": "Ir para o Jogo Base",
+    "Base Game": "Jogo Base"
   }
 }
