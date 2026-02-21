@@ -166,9 +166,12 @@
     }
 
     
-    function showLuaToolsConfirm(title, message, onConfirm, onCancel) {
-        
-        closeSettingsOverlay();
+    function showLuaToolsConfirm(title, message, onConfirm, onCancel, options) {
+        var opts = (options && typeof options === 'object') ? options : {};
+        var isGreyTheme = !!(opts.greyscale || opts.grayTheme || opts.greyTheme || opts.theme === 'grey' || opts.theme === 'gray');
+        if (!opts.keepOverlay) {
+            closeSettingsOverlay();
+        }
 
         
         if (document.querySelector('.luatools-confirm-overlay')) return;
@@ -180,14 +183,20 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100001;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:420px;max-width:540px;padding:32px 36px;box-shadow:0 20px 60px rgba(0,0,0,.9), 0 0 0 1px rgba(102,192,244,0.4);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = isGreyTheme
+            ? 'background:linear-gradient(160deg, #2b2b2b 0%, #1e1e1e 100%);color:#efefef;border:1px solid rgba(160,160,160,0.35);border-radius:12px;min-width:420px;max-width:540px;padding:32px 36px;box-shadow:0 20px 60px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,0.06);animation:slideUp 0.1s ease-out;'
+            : 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:420px;max-width:540px;padding:32px 36px;box-shadow:0 20px 60px rgba(0,0,0,.9), 0 0 0 1px rgba(102,192,244,0.4);animation:slideUp 0.1s ease-out;';
 
         const titleEl = document.createElement('div');
-        titleEl.style.cssText = 'font-size:22px;color:#fff;margin-bottom:20px;font-weight:700;text-align:center;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        titleEl.style.cssText = isGreyTheme
+            ? 'font-size:22px;color:#efefef;margin-bottom:20px;font-weight:700;text-align:center;text-shadow:none;background:none;-webkit-text-fill-color:#efefef;'
+            : 'font-size:22px;color:#fff;margin-bottom:20px;font-weight:700;text-align:center;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         titleEl.textContent = String(title || 'LuaTools');
 
         const messageEl = document.createElement('div');
-        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:28px;color:#c7d5e0;text-align:center;';
+        messageEl.style.cssText = isGreyTheme
+            ? 'font-size:15px;line-height:1.6;margin-bottom:28px;color:#d0d0d0;text-align:center;'
+            : 'font-size:15px;line-height:1.6;margin-bottom:28px;color:#c7d5e0;text-align:center;';
         messageEl.textContent = String(message || lt('Are you sure?'));
 
         const btnRow = document.createElement('div');
@@ -196,7 +205,9 @@
         const cancelBtn = document.createElement('a');
         cancelBtn.href = '#';
         cancelBtn.className = 'luatools-btn';
-        cancelBtn.style.flex = '1';
+        cancelBtn.style.cssText = isGreyTheme
+            ? 'flex:1;display:flex;align-items:center;justify-content:center;padding:12px 16px;border-radius:12px;border:1px solid rgba(150,150,150,0.35);background:linear-gradient(145deg, rgba(68,68,68,0.82), rgba(42,42,42,0.95));color:#e7e7e7;text-decoration:none;font-weight:700;'
+            : 'flex:1';
         cancelBtn.innerHTML = `<span>${lt('Cancel')}</span>`;
         cancelBtn.onclick = function(e) {
             e.preventDefault();
@@ -206,7 +217,9 @@
         const confirmBtn = document.createElement('a');
         confirmBtn.href = '#';
         confirmBtn.className = 'luatools-btn primary';
-        confirmBtn.style.flex = '1';
+        confirmBtn.style.cssText = isGreyTheme
+            ? 'flex:1;display:flex;align-items:center;justify-content:center;padding:12px 16px;border-radius:12px;border:1px solid rgba(190,190,190,0.55);background:linear-gradient(145deg, rgba(145,145,145,0.9), rgba(102,102,102,0.95));color:#151515;text-decoration:none;font-weight:700;box-shadow:0 6px 16px rgba(0,0,0,0.35);'
+            : 'flex:1';
         confirmBtn.innerHTML = `<span>${lt('Confirm')}</span>`;
         confirmBtn.onclick = function(e) {
             e.preventDefault();
@@ -241,24 +254,24 @@
 
         const overlay = document.createElement('div');
         overlay.className = 'luatools-dlc-warning-overlay luatools-overlay';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100001;display:flex;align-items:center;justify-content:center;';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px);z-index:100001;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:12px;width:520px;max-width:calc(100vw - 32px);padding:32px;box-shadow:0 25px 70px rgba(0,0,0,.9);';
+        modal.style.cssText = 'background:linear-gradient(160deg, #252a31 0%, #1d2127 100%);color:#e8edf2;border:1px solid #4e5967;border-radius:12px;width:520px;max-width:calc(100vw - 32px);padding:32px;box-shadow:0 25px 70px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,0.04) inset;';
 
         const iconWrap = document.createElement('div');
         iconWrap.style.cssText = 'text-align:center;margin-bottom:18px;';
         const icon = document.createElement('i');
         icon.className = 'fa-solid fa-circle-info';
-        icon.style.cssText = 'color:#66c0f4;font-size:44px;';
+        icon.style.cssText = 'color:#98a5b7;font-size:44px;';
         iconWrap.appendChild(icon);
 
         const titleEl = document.createElement('div');
-        titleEl.style.cssText = 'font-size:24px;font-weight:800;text-align:center;margin-bottom:14px;background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        titleEl.style.cssText = 'font-size:24px;font-weight:800;text-align:center;margin-bottom:14px;color:#d7dee8;letter-spacing:0.2px;';
         titleEl.textContent = lt('DLC Detected');
 
         const messageEl = document.createElement('div');
-        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:26px;color:#c7d5e0;text-align:center;';
+        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:26px;color:#bec8d5;text-align:center;';
         messageEl.innerHTML = lt('DLCs are added together with the base game. To add fixes for this DLC, please go to the base game page: <br><br><b>{gameName}</b>')
             .replace('{gameName}', fullgameName || lt('Base Game'));
 
@@ -283,8 +296,8 @@
         goBtn.onclick = function(e) {
             e.preventDefault();
             try {
-                if (typeof openExternalUrl === 'function') {
-                    openExternalUrl('https://store.steampowered.com/app/' + String(fullgameAppid) + '/');
+                if (typeof openSteamStore === 'function') {
+                    openSteamStore(fullgameAppid);
                 }
             } catch(_) {}
             overlay.remove();

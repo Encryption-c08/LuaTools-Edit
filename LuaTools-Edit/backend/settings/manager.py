@@ -340,6 +340,41 @@ def get_settings_payload() -> Dict[str, Any]:
     }
 
 
+def get_custom_setting_value(group_key: str, option_key: str, default: Any = None) -> Any:
+    """Read a persisted custom setting value from the settings payload."""
+    if not group_key or not option_key:
+        return copy.deepcopy(default)
+    with _SETTINGS_LOCK:
+        values = _get_values_locked()
+        group = values.get(str(group_key))
+        if not isinstance(group, dict):
+            return copy.deepcopy(default)
+        if option_key not in group:
+            return copy.deepcopy(default)
+        return copy.deepcopy(group.get(option_key))
+
+
+def set_custom_setting_value(group_key: str, option_key: str, value: Any) -> bool:
+    """Persist a custom setting value in the shared settings file."""
+    if not group_key or not option_key:
+        return False
+    group_key = str(group_key)
+    option_key = str(option_key)
+    with _SETTINGS_LOCK:
+        current = _get_values_locked()
+        updated = merge_defaults_with_values(current)
+        group = updated.get(group_key)
+        if not isinstance(group, dict):
+            group = {}
+            updated[group_key] = group
+        previous = group.get(option_key)
+        if previous == value:
+            return False
+        group[option_key] = copy.deepcopy(value)
+        _persist_values(updated)
+        return True
+
+
 def get_translation_map(locale: Optional[str] = None) -> Dict[str, Any]:
     manager = get_locale_manager()
     locales = manager.available_locales()

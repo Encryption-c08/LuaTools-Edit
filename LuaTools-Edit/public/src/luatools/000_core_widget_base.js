@@ -19,6 +19,17 @@
     const runState = { inProgress: false, appid: null };
     
     const TRANSLATION_PLACEHOLDER = 'translation missing';
+    const TOOLS_WIDGET_STORAGE_KEY = 'luatools.toolsWidgetPos.v1';
+    const TOOLS_WIDGET_MARGIN = 12;
+    const TOOLS_WIDGET_DRAG_THRESHOLD = 4;
+    const TOOLS_PANEL_GAP = 10;
+    const TOOLS_CLICK_SUPPRESS_MS = 220;
+    const TOOLS_WIDGET_BACKEND_SAVE_DEBOUNCE_MS = 160;
+    const toolsWidgetPersistState = {
+        loadRequested: false,
+        saveTimer: 0,
+        pending: null
+    };
 
     function applyTranslationBundle(bundle) {
         if (!bundle || typeof bundle !== 'object') return;
@@ -131,10 +142,15 @@
                     right: 18px;
                     bottom: 18px;
                     z-index: 100002;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: flex-end;
-                    gap: 10px;
+                    width: 52px;
+                    height: 52px;
+                }
+                .luatools-tools-widget.is-dragging {
+                    user-select: none;
+                }
+                .luatools-tools-widget.is-dragging .luatools-tools-launcher {
+                    cursor: grabbing;
+                    transition: none;
                 }
                 .luatools-tools-launcher {
                     width: 52px;
@@ -148,6 +164,7 @@
                     justify-content: center;
                     box-shadow: 0 10px 26px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08);
                     cursor: pointer;
+                    touch-action: none;
                     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
                     filter: grayscale(1);
                 }
@@ -170,8 +187,13 @@
                     font-size: 22px;
                 }
                 .luatools-tools-panel {
+                    position: fixed;
+                    left: 24px;
+                    top: 24px;
+                    z-index: 100003;
                     width: 340px;
                     max-width: calc(100vw - 36px);
+                    max-height: calc(100vh - 24px);
                     background: linear-gradient(160deg, #2b2b2b 0%, #1e1e1e 100%);
                     color: #e6e6e6;
                     border: 1px solid rgba(160,160,160,0.35);
@@ -227,6 +249,8 @@
                     display: flex;
                     flex-direction: column;
                     gap: 14px;
+                    overflow: auto;
+                    max-height: calc(100vh - 120px);
                 }
                 .luatools-tools-section {
                     font-size: 11px;
@@ -464,6 +488,179 @@
         } catch(err) { backendLog('LuaTools: Font Awesome injection failed: ' + err); }
     }
 
+    function clampValue(value, min, max) {
+        if (typeof value !== 'number' || !isFinite(value)) return min;
+        if (max < min) return min;
+        return Math.min(max, Math.max(min, value));
+    }
+
+    function getToolsWidgetSize(widget) {
+        if (!widget) return { width: 52, height: 52 };
+        const rect = widget.getBoundingClientRect();
+        const width = rect.width || widget.offsetWidth || 52;
+        const height = rect.height || widget.offsetHeight || 52;
+        return { width: width, height: height };
+    }
+
+    function clampToolsWidgetPosition(widget, left, top) {
+        const size = getToolsWidgetSize(widget);
+        const maxLeft = Math.max(TOOLS_WIDGET_MARGIN, window.innerWidth - size.width - TOOLS_WIDGET_MARGIN);
+        const maxTop = Math.max(TOOLS_WIDGET_MARGIN, window.innerHeight - size.height - TOOLS_WIDGET_MARGIN);
+        return {
+            left: clampValue(left, TOOLS_WIDGET_MARGIN, maxLeft),
+            top: clampValue(top, TOOLS_WIDGET_MARGIN, maxTop)
+        };
+    }
+
+    function normalizeToolsWidgetPosition(value) {
+        if (!value || typeof value !== 'object') return null;
+        const x = Number(value.x);
+        const y = Number(value.y);
+        if (!isFinite(x) || !isFinite(y)) return null;
+        return { x: Math.round(x), y: Math.round(y) };
+    }
+
+    function queueToolsWidgetBackendSave(left, top) {
+        if (typeof Millennium === 'undefined' || typeof Millennium.callServerMethod !== 'function') return;
+        toolsWidgetPersistState.pending = { x: Math.round(left), y: Math.round(top) };
+        if (toolsWidgetPersistState.saveTimer) {
+            clearTimeout(toolsWidgetPersistState.saveTimer);
+        }
+        toolsWidgetPersistState.saveTimer = setTimeout(function() {
+            toolsWidgetPersistState.saveTimer = 0;
+            const pending = toolsWidgetPersistState.pending;
+            toolsWidgetPersistState.pending = null;
+            if (!pending) return;
+            Millennium.callServerMethod('luatools', 'SetToolsWidgetPosition', {
+                x: pending.x,
+                y: pending.y,
+                contentScriptQuery: ''
+            }).catch(function(){});
+        }, TOOLS_WIDGET_BACKEND_SAVE_DEBOUNCE_MS);
+    }
+
+    function requestToolsWidgetBackendPosition(widget, panel, launcher) {
+        if (!widget || toolsWidgetPersistState.loadRequested) return;
+        toolsWidgetPersistState.loadRequested = true;
+        if (typeof Millennium === 'undefined' || typeof Millennium.callServerMethod !== 'function') return;
+        Millennium.callServerMethod('luatools', 'GetToolsWidgetPosition', {
+            contentScriptQuery: ''
+        }).then(function(res) {
+            let payload = null;
+            try {
+                payload = (typeof res === 'string') ? JSON.parse(res) : res;
+            } catch(_) {
+                return;
+            }
+            if (!payload || payload.success !== true) return;
+            const backendPos = normalizeToolsWidgetPosition(payload.position);
+            if (!backendPos) return;
+            if (widget.getAttribute('data-position-user-set') === '1') return;
+            setToolsWidgetPosition(widget, backendPos.x, backendPos.y, false);
+            try {
+                localStorage.setItem(TOOLS_WIDGET_STORAGE_KEY, JSON.stringify({
+                    x: backendPos.x,
+                    y: backendPos.y
+                }));
+            } catch(_) {}
+            if (panel && panel.classList.contains('is-open')) {
+                positionToolsPanel(panel, launcher);
+            }
+        }).catch(function(){});
+    }
+
+    function saveToolsWidgetPosition(left, top) {
+        const normalised = normalizeToolsWidgetPosition({ x: left, y: top });
+        if (!normalised) return;
+        try {
+            localStorage.setItem(TOOLS_WIDGET_STORAGE_KEY, JSON.stringify({
+                x: normalised.x,
+                y: normalised.y
+            }));
+        } catch(_) {}
+        queueToolsWidgetBackendSave(normalised.x, normalised.y);
+    }
+
+    function readToolsWidgetPosition() {
+        try {
+            const raw = localStorage.getItem(TOOLS_WIDGET_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return normalizeToolsWidgetPosition(parsed);
+        } catch(_) {
+            return null;
+        }
+    }
+
+    function setToolsWidgetPosition(widget, left, top, persist) {
+        if (!widget) return;
+        const clamped = clampToolsWidgetPosition(widget, left, top);
+        widget.style.left = Math.round(clamped.left) + 'px';
+        widget.style.top = Math.round(clamped.top) + 'px';
+        widget.style.right = 'auto';
+        widget.style.bottom = 'auto';
+        if (persist) {
+            saveToolsWidgetPosition(clamped.left, clamped.top);
+        }
+    }
+
+    function initializeToolsWidgetPosition(widget) {
+        if (!widget || widget.getAttribute('data-position-initialized') === '1') return;
+        const saved = readToolsWidgetPosition();
+        if (saved) {
+            setToolsWidgetPosition(widget, saved.x, saved.y, false);
+        } else {
+            const size = getToolsWidgetSize(widget);
+            const left = Math.max(TOOLS_WIDGET_MARGIN, window.innerWidth - size.width - TOOLS_WIDGET_MARGIN);
+            const top = Math.max(TOOLS_WIDGET_MARGIN, window.innerHeight - size.height - TOOLS_WIDGET_MARGIN);
+            setToolsWidgetPosition(widget, left, top, false);
+        }
+        widget.setAttribute('data-position-initialized', '1');
+    }
+
+    function clampToolsWidgetIntoViewport(widget, persist) {
+        if (!widget) return;
+        const rect = widget.getBoundingClientRect();
+        setToolsWidgetPosition(widget, rect.left, rect.top, !!persist);
+    }
+
+    function shouldSuppressToolsClick(launcher) {
+        if (!launcher) return false;
+        const until = Number(launcher.getAttribute('data-suppress-click-until') || '0');
+        return isFinite(until) && until > Date.now();
+    }
+
+    function markToolsClickSuppressed(launcher) {
+        if (!launcher) return;
+        launcher.setAttribute('data-suppress-click-until', String(Date.now() + TOOLS_CLICK_SUPPRESS_MS));
+    }
+
+    function positionToolsPanel(panel, launcher) {
+        if (!panel || !launcher) return;
+        const launcherRect = launcher.getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+        const panelWidth = panelRect.width || panel.offsetWidth || 340;
+        const panelHeight = panelRect.height || panel.offsetHeight || 420;
+        let left = launcherRect.left + (launcherRect.width / 2) - (panelWidth / 2);
+        let top = launcherRect.top - TOOLS_PANEL_GAP - panelHeight;
+        const belowTop = launcherRect.bottom + TOOLS_PANEL_GAP;
+
+        if (top < TOOLS_WIDGET_MARGIN && (belowTop + panelHeight) <= (window.innerHeight - TOOLS_WIDGET_MARGIN)) {
+            top = belowTop;
+        }
+
+        const maxLeft = Math.max(TOOLS_WIDGET_MARGIN, window.innerWidth - panelWidth - TOOLS_WIDGET_MARGIN);
+        const maxTop = Math.max(TOOLS_WIDGET_MARGIN, window.innerHeight - panelHeight - TOOLS_WIDGET_MARGIN);
+
+        left = clampValue(left, TOOLS_WIDGET_MARGIN, maxLeft);
+        top = clampValue(top, TOOLS_WIDGET_MARGIN, maxTop);
+
+        panel.style.left = Math.round(left) + 'px';
+        panel.style.top = Math.round(top) + 'px';
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+    }
+
     function animateToolsLauncher(launcher) {
         if (!launcher) return;
         launcher.classList.remove('luatools-tools-bounce');
@@ -522,9 +719,74 @@
             document.body.appendChild(widget);
         }
 
+        initializeToolsWidgetPosition(widget);
+        requestToolsWidgetBackendPosition(widget, panel, launcher);
+        if (panel.classList.contains('is-open')) {
+            positionToolsPanel(panel, launcher);
+        }
+
         if (!widget.getAttribute('data-bound')) {
             widget.setAttribute('data-bound', '1');
+            launcher.addEventListener('pointerdown', function(e){
+                if (e.button !== 0) return;
+
+                const startRect = widget.getBoundingClientRect();
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const pointerId = e.pointerId;
+                let dragging = false;
+
+                function onPointerMove(moveEvent) {
+                    const dx = moveEvent.clientX - startX;
+                    const dy = moveEvent.clientY - startY;
+                    if (!dragging) {
+                        if (Math.abs(dx) < TOOLS_WIDGET_DRAG_THRESHOLD && Math.abs(dy) < TOOLS_WIDGET_DRAG_THRESHOLD) {
+                            return;
+                        }
+                        dragging = true;
+                        widget.classList.add('is-dragging');
+                    }
+                    moveEvent.preventDefault();
+                    setToolsWidgetPosition(widget, startRect.left + dx, startRect.top + dy, false);
+                    if (panel.classList.contains('is-open')) {
+                        positionToolsPanel(panel, launcher);
+                    }
+                }
+
+                function onPointerDone(doneEvent) {
+                    window.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerDone);
+                    window.removeEventListener('pointercancel', onPointerDone);
+                    widget.classList.remove('is-dragging');
+                    if (launcher && launcher.releasePointerCapture) {
+                        try { launcher.releasePointerCapture(pointerId); } catch(_) {}
+                    }
+                    if (dragging) {
+                        widget.setAttribute('data-position-user-set', '1');
+                        const rect = widget.getBoundingClientRect();
+                        saveToolsWidgetPosition(rect.left, rect.top);
+                        markToolsClickSuppressed(launcher);
+                        if (doneEvent) {
+                            doneEvent.preventDefault();
+                            doneEvent.stopPropagation();
+                        }
+                    }
+                }
+
+                if (launcher && launcher.setPointerCapture) {
+                    try { launcher.setPointerCapture(pointerId); } catch(_) {}
+                }
+
+                window.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerDone);
+                window.addEventListener('pointercancel', onPointerDone);
+            });
             launcher.addEventListener('click', function(e){
+                if (shouldSuppressToolsClick(launcher)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 animateToolsLauncher(launcher);
@@ -536,6 +798,12 @@
             document.addEventListener('click', function(){
                 if (panel.classList.contains('is-open')) {
                     closeToolsMenu();
+                }
+            });
+            window.addEventListener('resize', function(){
+                clampToolsWidgetIntoViewport(widget, true);
+                if (panel.classList.contains('is-open')) {
+                    positionToolsPanel(panel, launcher);
                 }
             });
         }

@@ -42,6 +42,13 @@
         const tabsBar = document.createElement('div');
         tabsBar.className = 'luatools-settings-tabs';
 
+        const statusRow = document.createElement('div');
+        statusRow.style.cssText = 'padding:6px 24px 0;min-height:20px;display:flex;align-items:center;justify-content:center;';
+        const statusLine = document.createElement('div');
+        statusLine.className = 'luatools-settings-status';
+        statusLine.style.cssText = 'font-size:12px;line-height:18px;color:#cfcfcf;min-height:18px;text-align:center;max-width:100%;';
+        statusRow.appendChild(statusLine);
+
         const btnRow = document.createElement('div');
         btnRow.style.cssText = 'padding:18px 24px 22px;display:flex;gap:12px;justify-content:space-between;align-items:center;';
 
@@ -53,6 +60,7 @@
 
         modal.appendChild(header);
         modal.appendChild(tabsBar);
+        modal.appendChild(statusRow);
         modal.appendChild(contentWrap);
         modal.appendChild(btnRow);
         overlay.appendChild(modal);
@@ -152,20 +160,13 @@
         updateTabLabels();
 
         function setStatus(text, color) {
-            let statusLine = contentWrap.querySelector('.luatools-settings-status');
-            if (!statusLine) {
-                statusLine = document.createElement('div');
-                statusLine.className = 'luatools-settings-status';
-                statusLine.style.cssText = 'font-size:12px;margin-top:10px;transform:translateY(12px);color:#cfcfcf;min-height:18px;text-align:center;';
-                contentWrap.insertBefore(statusLine, contentWrap.firstChild);
-            }
             statusLine.textContent = text || '';
             statusLine.style.color = color || '#cfcfcf';
         }
 
         function clearStatus() {
-            const statusLine = contentWrap.querySelector('.luatools-settings-status');
-            if (statusLine) statusLine.remove();
+            statusLine.textContent = '';
+            statusLine.style.color = '#cfcfcf';
         }
 
         function ensureDraftGroup(groupKey) {
@@ -252,7 +253,7 @@
                 const groupTitle = document.createElement('div');
                 groupTitle.textContent = t('settings.' + group.key, group.label || group.key);
                 if (group.key === 'general') {
-                    groupTitle.style.cssText = 'font-size:20px;color:#e6e6e6;margin-bottom:16px;margin-top:-20px;font-weight:600;text-align:center;';
+                    groupTitle.style.cssText = 'font-size:20px;color:#e6e6e6;margin-bottom:16px;margin-top:0;font-weight:600;text-align:center;';
                 } else {
                     groupTitle.style.cssText = 'font-size:14px;font-weight:600;color:#bdbdbd;text-align:center;';
                 }
@@ -339,35 +340,59 @@
                         let noLabel = option.metadata && option.metadata.noLabel ? String(option.metadata.noLabel) : 'No';
 
                         const yesBtn = document.createElement('a');
-                        yesBtn.className = 'btnv6_blue_hoverfade btn_small';
                         yesBtn.href = '#';
                         yesBtn.innerHTML = '<span>' + yesLabel + '</span>';
+                        yesBtn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:130px;padding:7px 14px;border-radius:10px;border:1px solid rgba(150,150,150,0.35);background:linear-gradient(180deg, rgba(56,56,56,0.75), rgba(34,34,34,0.92));color:#d6d6d6;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.2px;transition:all 0.18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);';
 
                         const noBtn = document.createElement('a');
-                        noBtn.className = 'btnv6_blue_hoverfade btn_small';
                         noBtn.href = '#';
                         noBtn.innerHTML = '<span>' + noLabel + '</span>';
+                        noBtn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:160px;padding:7px 14px;border-radius:10px;border:1px solid rgba(150,150,150,0.35);background:linear-gradient(180deg, rgba(56,56,56,0.75), rgba(34,34,34,0.92));color:#d6d6d6;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.2px;transition:all 0.18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);';
 
                         const yesSpan = yesBtn.querySelector('span');
                         const noSpan = noBtn.querySelector('span');
 
+                        function applyToggleButtonState(btn, isActive) {
+                            btn.dataset.active = isActive ? '1' : '0';
+                            if (isActive) {
+                                btn.style.background = 'linear-gradient(180deg, rgba(175,175,175,0.9), rgba(122,122,122,0.95))';
+                                btn.style.borderColor = 'rgba(230,230,230,0.68)';
+                                btn.style.color = '#ffffff';
+                                btn.style.boxShadow = '0 6px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.18)';
+                                btn.style.transform = 'translateY(-1px)';
+                            } else {
+                                btn.style.background = 'linear-gradient(180deg, rgba(56,56,56,0.75), rgba(34,34,34,0.92))';
+                                btn.style.borderColor = 'rgba(150,150,150,0.35)';
+                                btn.style.color = '#d6d6d6';
+                                btn.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.05)';
+                                btn.style.transform = 'translateY(0)';
+                            }
+                        }
+
+                        function wireToggleHover(btn) {
+                            btn.addEventListener('mouseenter', function() {
+                                if (btn.dataset.active === '1') return;
+                                btn.style.borderColor = 'rgba(205,205,205,0.5)';
+                                btn.style.color = '#f1f1f1';
+                                btn.style.transform = 'translateY(-1px)';
+                            });
+                            btn.addEventListener('mouseleave', function() {
+                                if (btn.dataset.active === '1') return;
+                                btn.style.borderColor = 'rgba(150,150,150,0.35)';
+                                btn.style.color = '#d6d6d6';
+                                btn.style.transform = 'translateY(0)';
+                            });
+                        }
+
+                        wireToggleHover(yesBtn);
+                        wireToggleHover(noBtn);
+
                         function refreshToggleButtons() {
                             const currentValue = state.draft[group.key][option.key] === true;
-                            if (currentValue) {
-                                yesBtn.style.background = '#bdbdbd';
-                                yesBtn.style.color = '#1a1a1a';
-                                if (yesSpan) yesSpan.style.color = '#1a1a1a';
-                                noBtn.style.background = '';
-                                noBtn.style.color = '';
-                                if (noSpan) noSpan.style.color = '';
-                            } else {
-                                noBtn.style.background = '#bdbdbd';
-                                noBtn.style.color = '#1a1a1a';
-                                if (noSpan) noSpan.style.color = '#1a1a1a';
-                                yesBtn.style.background = '';
-                                yesBtn.style.color = '';
-                                if (yesSpan) yesSpan.style.color = '';
-                            }
+                            applyToggleButtonState(yesBtn, currentValue);
+                            applyToggleButtonState(noBtn, !currentValue);
+                            if (yesSpan) yesSpan.style.color = yesBtn.style.color;
+                            if (noSpan) noSpan.style.color = noBtn.style.color;
                         }
 
                         yesBtn.addEventListener('click', function(e){
@@ -883,53 +908,48 @@
                 e.preventDefault();
                 if (deleteBtn.dataset.busy === '1') return;
 
-                showLuaToolsConfirm(
-                    script.gameName || 'LuaTools',
-                    t('settings.installedLua.deleteConfirm', 'Remove via LuaTools for this game?'),
-                    function() {
-                        
-                        deleteBtn.dataset.busy = '1';
-                        deleteBtn.style.opacity = '0.6';
-                        deleteBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+                deleteBtn.dataset.busy = '1';
+                deleteBtn.style.opacity = '0.6';
+                deleteBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
 
-                        Millennium.callServerMethod('luatools', 'DeleteLuaToolsForApp', {
-                            appid: script.appid,
-                            contentScriptQuery: ''
-                        })
-                        .then(function(res) {
-                            const response = typeof res === 'string' ? JSON.parse(res) : res;
-                            if (!response || !response.success) {
-                                alert(t('settings.installedLua.deleteError', 'Failed to remove Lua script.'));
-                                deleteBtn.dataset.busy = '0';
-                                deleteBtn.style.opacity = '1';
-                                deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
-                                return;
-                            }
-
-                            
-                            itemEl.style.transition = 'all 0.3s ease';
-                            itemEl.style.opacity = '0';
-                            itemEl.style.transform = 'translateX(-20px)';
-                            setTimeout(function() {
-                            itemEl.remove();
-                            
-                            if (container.children.length === 0) {
-                                container.innerHTML = '<div style="padding:14px;background:#1a1a1a;border:1px solid #3a3a3a;border-radius:4px;color:#cfcfcf;text-align:center;">' + t('settings.installedLua.empty', 'No Lua scripts installed yet.') + '</div>';
-                            }
-                            scheduleRestartSteam(3);
-                        }, 300);
-                        })
-                        .catch(function(err) {
-                            alert(t('settings.installedLua.deleteError', 'Failed to remove Lua script.') + ' ' + (err && err.message ? err.message : ''));
-                            deleteBtn.dataset.busy = '0';
-                            deleteBtn.style.opacity = '1';
-                            deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
-                        });
-                    },
-                    function() {
-                        
+                Millennium.callServerMethod('luatools', 'DeleteLuaToolsForApp', {
+                    appid: script.appid,
+                    contentScriptQuery: ''
+                })
+                .then(function(res) {
+                    const response = typeof res === 'string' ? JSON.parse(res) : res;
+                    if (!response || !response.success) {
+                        alert(t('settings.installedLua.deleteError', 'Failed to remove Lua script.'));
+                        deleteBtn.dataset.busy = '0';
+                        deleteBtn.style.opacity = '1';
+                        deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+                        return;
                     }
-                );
+
+                    try {
+                        if (typeof invalidateInstalledLuaScriptsCache === 'function') {
+                            invalidateInstalledLuaScriptsCache();
+                        }
+                    } catch(_) {}
+
+                    itemEl.style.transition = 'all 0.3s ease';
+                    itemEl.style.opacity = '0';
+                    itemEl.style.transform = 'translateX(-20px)';
+                    setTimeout(function() {
+                        itemEl.remove();
+
+                        if (container.children.length === 0) {
+                            container.innerHTML = '<div style="padding:14px;background:#1a1a1a;border:1px solid #3a3a3a;border-radius:4px;color:#cfcfcf;text-align:center;">' + t('settings.installedLua.empty', 'No Lua scripts installed yet.') + '</div>';
+                        }
+                        scheduleRestartSteam(3);
+                    }, 300);
+                })
+                .catch(function(err) {
+                    alert(t('settings.installedLua.deleteError', 'Failed to remove Lua script.') + ' ' + (err && err.message ? err.message : ''));
+                    deleteBtn.dataset.busy = '0';
+                    deleteBtn.style.opacity = '1';
+                    deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+                });
             });
 
             actionsWrap.appendChild(deleteBtn);

@@ -39,3 +39,5 @@ APPID_LOG_FILE = os.path.join(RUNTIME_DATA_DIR, "appidlogs.txt")
 DAILY_ADD_LIMIT = 25
 DAILY_ADD_USAGE_FILE = os.path.join(RUNTIME_DATA_DIR, "daily_add_limit.json")
 TEMP_DOWNLOAD_DIR = os.path.join(RUNTIME_DATA_DIR, "temp_dl")
+APP_META_CACHE_FILE = os.path.join(RUNTIME_DATA_DIR, "app_metadata_cache.json")
+APP_META_CACHE_ZIP_DIR = os.path.join(RUNTIME_DATA_DIR, "meta_cache", "zips")

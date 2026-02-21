@@ -180,6 +180,12 @@
 
             panel.classList.add('is-open');
             panel.setAttribute('aria-hidden', 'false');
+            if (typeof positionToolsPanel === 'function') {
+                positionToolsPanel(panel, launcher);
+                setTimeout(function() {
+                    positionToolsPanel(panel, launcher);
+                }, 30);
+            }
             if (launcher) {
                 launcher.classList.add('is-open');
                 launcher.setAttribute('aria-expanded', 'true');
@@ -428,12 +434,18 @@
                                     try {
                                         Millennium.callServerMethod('luatools', 'DeleteLuaToolsForApp', { appid, contentScriptQuery: '' }).then(function(){
                                             try {
+                                                if (typeof invalidateInstalledLuaScriptsCache === 'function') {
+                                                    invalidateInstalledLuaScriptsCache();
+                                                }
                                                 window.__LuaToolsButtonInserted = false;
                                                 window.__LuaToolsPresenceCheckInFlight = false;
                                                 window.__LuaToolsPresenceCheckAppId = undefined;
                                                 addLuaToolsButton();
                                                 const successText = t('menu.remove.success', 'LuaTools removed for this app.');
                                                 ShowLuaToolsAlert('LuaTools', successText);
+                                                if (typeof scheduleRestartSteam === 'function') {
+                                                    scheduleRestartSteam(3);
+                                                }
                                             } catch(err) {
                                                 backendLog('LuaTools: post-delete cleanup failed: ' + err);
                                             }
@@ -451,12 +463,7 @@
                                 removeBtn.style.display = 'flex';
                                 removeBtn.onclick = function(e){
                                     e.preventDefault();
-                                    const confirmMessage = t('menu.remove.confirm', 'Remove via LuaTools for this game?');
-                                    showLuaToolsConfirm('LuaTools', confirmMessage, function(){
-                                        doDelete();
-                                    }, function(){
-                                        try { showSettingsPopup(); } catch(_) {}
-                                    });
+                                    doDelete();
                                 };
                             } else {
                                 removeBtn.style.display = 'none';

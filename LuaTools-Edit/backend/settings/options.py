@@ -48,6 +48,21 @@ SETTINGS_GROUPS: List[SettingGroup] = [
             ),
         ],
     ),
+    SettingGroup(
+        key="addViaLuaTools",
+        label="Add via LuaTools",
+        description="Control what gets installed when adding a game via LuaTools.",
+        options=[
+            SettingOption(
+                key="installAllContent",
+                label="Install Scope",
+                option_type="toggle",
+                description="Install all available DLC/special content with the base game, or install only the base game.",
+                default=True,
+                metadata={"yesLabel": "Everything", "noLabel": "Base Game Only"},
+            ),
+        ],
+    ),
 ]
 
 
@@ -107,4 +122,3 @@ def merge_defaults_with_values(values: Optional[Dict[str, Any]]) -> Dict[str, An
         merged[group_key] = merged_group
 
     return merged
-

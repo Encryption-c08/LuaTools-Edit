@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import shutil
 import sys
@@ -26,9 +27,11 @@ from downloads import (
     delete_luatools_for_app,
     dismiss_loaded_apps,
     get_add_status,
+    get_api_related_entries,
     get_daily_add_usage,
     get_icon_data_url,
     get_installed_lua_scripts,
+    get_steamdb_related_entries,
     has_luatools_for_app,
     init_applist,
     read_loaded_apps,
@@ -51,9 +54,11 @@ from paths import get_plugin_dir
 from settings.manager import (
     apply_settings_changes,
     get_available_locales,
+    get_custom_setting_value,
     get_settings_payload,
     get_translation_map,
     init_settings,
+    set_custom_setting_value,
 )
 from steam_utils import detect_steam_install_path, get_game_install_path_response, open_game_folder
 
@@ -162,8 +167,17 @@ def HasLuaToolsForApp(appid: int, contentScriptQuery: str = "") -> str:
     return has_luatools_for_app(appid)
 
 
-def StartAddViaLuaTools(appid: int, contentScriptQuery: str = "") -> str:
-    return start_add_via_luatools(appid)
+def StartAddViaLuaTools(
+    appid: int,
+    baseAppid: int = 0,
+    baseOwnedOnSteam: bool = False,
+    contentScriptQuery: str = "",
+) -> str:
+    return start_add_via_luatools(
+        appid,
+        base_appid=baseAppid,
+        base_owned_on_steam=bool(baseOwnedOnSteam),
+    )
 
 
 def GetAddViaLuaToolsStatus(appid: int, contentScriptQuery: str = "") -> str:
@@ -226,6 +240,14 @@ def GetInstalledLuaScripts(contentScriptQuery: str = "") -> str:
     return get_installed_lua_scripts()
 
 
+def GetSteamDbRelatedEntries(appid: int, contentScriptQuery: str = "") -> str:
+    return get_steamdb_related_entries(appid)
+
+
+def GetApiRelatedEntries(appid: int, contentScriptQuery: str = "") -> str:
+    return get_api_related_entries(appid)
+
+
 def GetGameInstallPath(appid: int, contentScriptQuery: str = "") -> str:
     result = get_game_install_path_response(appid)
     return json.dumps(result)
@@ -271,6 +293,49 @@ def OpenSteamUri(uri: str, contentScriptQuery: str = "") -> str:
         return json.dumps({"success": True})
     except Exception as exc:
         logger.warn(f"LuaTools: OpenSteamUri failed: {exc}")
+        return json.dumps({"success": False, "error": str(exc)})
+
+
+def GetToolsWidgetPosition(contentScriptQuery: str = "") -> str:
+    try:
+        stored = get_custom_setting_value("uiState", "toolsWidgetPosition", None)
+        if not isinstance(stored, dict):
+            return json.dumps({"success": True, "position": None})
+
+        x_raw = stored.get("x")
+        y_raw = stored.get("y")
+        x = float(x_raw)
+        y = float(y_raw)
+        if not math.isfinite(x) or not math.isfinite(y):
+            return json.dumps({"success": True, "position": None})
+
+        position = {"x": int(round(x)), "y": int(round(y))}
+        return json.dumps({"success": True, "position": position})
+    except Exception as exc:
+        logger.warn(f"LuaTools: GetToolsWidgetPosition failed: {exc}")
+        return json.dumps({"success": False, "error": str(exc)})
+
+
+def SetToolsWidgetPosition(
+    x: Any = None,
+    y: Any = None,
+    position: Any = None,
+    contentScriptQuery: str = "",
+) -> str:
+    try:
+        source = position if isinstance(position, dict) else {"x": x, "y": y}
+        x_raw = source.get("x")
+        y_raw = source.get("y")
+        x_num = float(x_raw)
+        y_num = float(y_raw)
+        if not math.isfinite(x_num) or not math.isfinite(y_num):
+            return json.dumps({"success": False, "error": "Invalid position"})
+
+        payload = {"x": int(round(x_num)), "y": int(round(y_num))}
+        changed = set_custom_setting_value("uiState", "toolsWidgetPosition", payload)
+        return json.dumps({"success": True, "changed": bool(changed), "position": payload})
+    except Exception as exc:
+        logger.warn(f"LuaTools: SetToolsWidgetPosition failed: {exc}")
         return json.dumps({"success": False, "error": str(exc)})
 
 
